@@ -1,0 +1,33 @@
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller build artifacts
+build/
+*.spec
+dist/data/
+dist/backups/
+
+# Optional: Bỏ comment dòng dưới nếu không muốn đẩy file .exe (37MB) lên Git (khuyên dùng GitHub Releases thay thế)
+# dist/
+
+# Thư mục kiểm thử tạm thời
+test_*_env/
+test_persistence_env/
+test_standalone_env/
+
+# Thư mục sao lưu (chỉ giữ thư mục rỗng với .gitkeep)
+backups/*.bak
+backups/*.bak.latest
+!backups/.gitkeep
+
+# File tạm thời
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Cấu hình IDE cá nhân
+.vscode/
+.idea/
+*.swp
