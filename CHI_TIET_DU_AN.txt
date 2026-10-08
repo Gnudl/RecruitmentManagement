@@ -1,0 +1,404 @@
+================================================================================
+          BÁO CÁO CHI TIẾT CẤU TRÚC & MÃ NGUỒN ĐỒ ÁN
+      HỆ THỐNG QUẢN LÝ TUYỂN DỤNG (ĐỀ TÀI 23) - PYTHON TKINTER
+================================================================================
+
+I. TỔNG QUAN ĐỒ ÁN
+--------------------------------------------------------------------------------
+- Tên đồ án: Hệ thống Quản lý Tuyển dụng (Đề tài 23).
+- Ngôn ngữ: Python 3.10+
+- Giao diện: Desktop GUI với thư viện chuẩn Tkinter/ttk (không dùng framework ngoài).
+- Định dạng dữ liệu: JSON thuần (tuyệt đối không dùng RDBMS/MySQL/SQL Server).
+- Kiến trúc phần mềm: Mô hình OOP phân tầng (Layered Architecture):
+    1. Tầng Mô hình Thực thể (Models Layer)
+    2. Tầng Quản lý Lưu trữ Tệp an toàn (FileManager Layer)
+    3. Tầng Dịch vụ Nghiệp vụ (Services Layer)
+    4. Tầng Giao diện Người dùng (UI Layer)
+- Quy tắc luồng dữ liệu bắt buộc:
+    Giao diện (UI) -> Dịch vụ (Services) -> Mô hình (Models) & FileManager -> File JSON
+
+
+II. CÂY THƯ MỤC TỔNG THỂ DỰ ÁN
+--------------------------------------------------------------------------------
+DeTai23/
+├── models/                     # Tầng Mô hình Hướng đối tượng (OOP)
+│   ├── __init__.py
+│   ├── person.py               # Lớp trừu tượng Person(ABC) & Regex validation
+│   ├── candidate.py            # Lớp Candidate kế thừa Person
+│   ├── user.py                 # Lớp User kế thừa Person (phân quyền Admin/Staff)
+│   └── job_position.py         # Lớp JobPosition (vị trí tuyển dụng)
+├── services/                   # Tầng Nghiệp vụ & Dịch vụ hệ thống
+│   ├── __init__.py
+│   ├── file_manager.py         # Đọc/ghi JSON an toàn, atomic write, backup, recovery
+│   ├── auth_service.py         # Xác thực, phiên làm việc, băm SHA-256
+│   ├── recruitment_mgr.py      # CRUD ứng viên & vị trí, lọc, tìm kiếm, xuất CSV
+│   └── job_crawler.py          # Crawl tin IT qua API, đa luồng, fallback offline
+├── ui/                         # Tầng Giao diện Người dùng (Tkinter)
+│   ├── __init__.py
+│   ├── custom_widgets.py       # CandidateCard đổi màu viền theo trạng thái
+│   ├── funnel_canvas.py        # FunnelCanvas vẽ tay biểu đồ phễu bằng Canvas
+│   ├── candidate_view.py       # Màn hình quản lý ứng viên (Form grid, Treeview)
+│   ├── login_window.py         # Cửa sổ đăng nhập (ẩn password, phím Enter)
+│   └── main_window.py          # Cửa sổ chính (Notebook 3 tab, worker thread, status bar)
+├── data/                       # Dữ liệu JSON lưu trữ nghiệp vụ
+│   ├── users.json              # Tài khoản đăng nhập (mật khẩu băm SHA-256)
+│   ├── jobs.json               # Danh mục vị trí tuyển dụng
+│   ├── candidates.json         # Danh sách hồ sơ ứng viên
+│   └── crawled_jobs.json       # Dữ liệu tin IT đã thu thập từ API
+├── backups/                    # Bản sao lưu tự động .bak của candidates.json
+├── tests/                      # Bộ kiểm thử tự động (40 tests - 100% PASS)
+│   ├── __init__.py
+│   ├── test_models.py          # Kiểm thử OOP, Abstraction, Regex (6 tests)
+│   ├── test_file_manager.py    # Kiểm thử an toàn file, 0-byte, phục hồi (8 tests)
+│   ├── test_services.py        # Kiểm thử nghiệp vụ, phân quyền, băm mật khẩu (14 tests)
+│   ├── test_ui.py              # Kiểm thử giao diện & non-blocking crawler (11 tests)
+│   └── test_flow_verification.py # Kiểm thử luồng tích hợp toàn trình (1 test)
+├── dist/
+│   └── QuanLyTuyenDung.exe     # File thực thi độc lập (PyInstaller đóng gói)
+├── file_manager.py             # Cầu nối import tiện ích tại thư mục gốc
+├── main.py                     # Điểm khởi chạy chính của phần mềm
+├── README.md                   # Tài liệu hướng dẫn sử dụng và báo cáo đồ án
+├── .gitignore                  # Cấu hình bỏ qua file tạm khi quản lý Git
+└── CHI_TIET_DU_AN.txt          # File báo cáo thuyết minh này
+
+
+III. THUYẾT MINH CHI TIẾT TỪNG FILE TRONG HỆ THỐNG
+--------------------------------------------------------------------------------
+
+1. TẦNG MODELS (models/) - Định nghĩa thực thể & tính chất OOP
+--------------------------------------------------------------------------------
+• models/person.py:
+  - Định nghĩa lớp cơ sở trừu tượng Person kế thừa từ abc.ABC.
+  - Thuộc tính private: _person_id, _full_name, _email, _phone.
+  - Áp dụng triệt để tính Đóng gói (Encapsulation) thông qua @property và @setter.
+  - Tích hợp biểu thức chính quy (Regex):
+    + Email: Regex r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$',
+      chặn đứng mọi email sai định dạng (vd: nguyenvana@).
+    + Số điện thoại di động VN: Regex r'^(03|05|07|08|09)\d{8}$',
+      bắt buộc đúng 10 số và đúng đầu số của các nhà mạng Việt Nam.
+  - Phương thức trừu tượng: to_dict() và get_role_display().
+
+• models/candidate.py:
+  - Lớp Candidate kế thừa (Inheritance) từ Person.
+  - Bổ sung các thuộc tính tuyển dụng: _position_id, _experience_years, _status, _interview_score.
+  - Ràng buộc dữ liệu:
+    + _status phải nằm trong 6 trạng thái chuẩn:
+      ['Nộp hồ sơ', 'Duyệt CV', 'Phỏng vấn vòng 1', 'Phỏng vấn vòng 2', 'Đạt/Offer', 'Loại']
+    + _interview_score: Bắt buộc trong đoạn [0, 100], báo lỗi nếu < 0 hoặc > 100.
+    + _experience_years: Bắt buộc >= 0.
+  - Ghi đè phương thức (Polymorphism/Method Overriding):
+    + to_dict(): Tuần tự hóa đối tượng thành dictionary lưu JSON.
+    + get_role_display(): Trả về chuỗi "Ứng viên".
+    + __str__(): Định dạng chuỗi hiển thị tóm tắt.
+    + from_dict(): Classmethod tái tạo đối tượng Candidate từ dictionary.
+
+• models/user.py:
+  - Lớp User kế thừa từ Person, đại diện cho tài khoản đăng nhập hệ thống.
+  - Bổ sung thuộc tính: _username, _password_hash (chuỗi SHA-256 64 ký tự), _role (Admin/Staff).
+  - Phương thức kiểm tra vai trò: is_admin(), is_staff().
+  - Ghi đè: to_dict(), get_role_display(), __str__(), from_dict().
+
+• models/job_position.py:
+  - Lớp JobPosition đại diện cho vị trí tuyển dụng.
+  - Thuộc tính: _position_id, _title, _department, _min_salary, _max_salary, _quota, _status.
+  - Ràng buộc nghiệp vụ:
+    + min_salary <= max_salary (lương tối thiểu không được vượt quá lương tối đa).
+    + quota là số nguyên dương > 0 (chỉ tiêu tuyển dụng).
+  - Phương thức: to_dict(), from_dict(), set_salary_range().
+
+• models/__init__.py:
+  - Module xuất khẩu các lớp Person, Candidate, User, JobPosition.
+
+
+2. TẦNG QUẢN LÝ TỆP TIN (services/file_manager.py & file_manager.py)
+--------------------------------------------------------------------------------
+• services/file_manager.py:
+  - Định nghĩa lớp FileManager quản lý đọc/ghi JSON an toàn với 4 cơ chế bảo vệ:
+    1. Ghi file nguyên tử (Atomic Write):
+       Dữ liệu được ghi vào file tạm .tmp trong cùng thư mục -> gọi flush() và
+       os.fsync() ép dữ liệu ghi xuống đĩa cứng vật lý -> kiểm tra dữ liệu đọc lại
+       hợp lệ -> dùng os.replace() để hoán đổi thay thế file chính nguyên tử.
+       Ngăn chặn triệt để nguy cơ hỏng tệp khi mất điện hoặc tắt app đột ngột.
+    2. Tự động sao lưu (Auto-backup):
+       Trước khi ghi đè candidates.json, tự động copy file hiện tại sang thư mục
+       backups/ với định dạng tên {filename}_{timestamp}.bak.
+    3. Xử lý file 0-byte (Fault Tolerance):
+       Nếu file rỗng hoặc 0-byte, read_json() tự động trả về [] mà không làm văng
+       lỗi JSONDecodeError, app không bị crash.
+    4. Tự phục hồi tệp hỏng (Auto-recovery):
+       Nếu file JSON bị lỗi cú pháp, tự động quét thư mục backups/, tìm bản sao lưu
+       .bak hợp lệ gần nhất, khôi phục ghi đè lại file chính và nạp lại dữ liệu.
+       Nếu không có backup hợp lệ nào, ném lỗi JSONCorruptedError rõ ràng.
+    5. Hỗ trợ đa môi trường (get_base_dir):
+       Tự nhận diện sys.frozen để chạy chuẩn xác cả từ mã nguồn Python lẫn từ file
+       thực thi .exe độc lập đóng gói bằng PyInstaller.
+
+• file_manager.py:
+  - Module cầu nối tại thư mục gốc, chuyển tiếp import sang services.file_manager.
+
+
+3. TẦNG DỊCH VỤ NGHIỆP VỤ (services/)
+--------------------------------------------------------------------------------
+• services/auth_service.py:
+  - Lớp AuthService quản lý xác thực và phân quyền:
+    + hash_password(): Băm mật khẩu bằng thuật toán SHA-256 (hashlib.sha256).
+    + verify_password(): So khớp mật khẩu đăng nhập với mã băm lưu trong users.json.
+    + login(username, password): Xác thực đăng nhập và lưu session _current_user.
+    + logout(): Hủy phiên đăng nhập.
+    + Phân quyền: is_admin(), is_staff(), has_role().
+    + Tự động khởi tạo 2 tài khoản mẫu:
+      * Admin: admin / admin123
+      * Staff: staff / staff123
+      (Mật khẩu được băm SHA-256 ngay khi ghi vào users.json).
+
+• services/recruitment_mgr.py:
+  - Lớp RecruitmentManager xử lý toàn bộ logic nghiệp vụ tuyển dụng:
+    + Candidate CRUD:
+      * create_candidate(): Kiểm tra trùng ID (không phân biệt hoa/thường).
+      * get_candidates(), get_candidate_by_id().
+      * update_candidate().
+      * delete_candidate(): KIỂM TRA PHÂN QUYỀN TRỰC TIẾP Ở SERVICE LAYER.
+        Nếu current_user là Staff -> ném lỗi PermissionError ngay tại chỗ.
+    + Tìm kiếm ứng viên (search_candidates):
+      * Không phân biệt hoa/thường (case-insensitive).
+      * Hỗ trợ tiếng Việt Unicode: tìm "nguyễn" khớp cả "Nguyễn Văn An" và "Trần NGUYỄN".
+      * Tìm kiếm theo cả Họ tên và Số điện thoại.
+    + Lọc kết hợp (filter_candidates):
+      * Lọc kết hợp linh hoạt theo Vị trí tuyển dụng (position_id) và Trạng thái (status).
+    + JobPosition CRUD:
+      * create_job(), get_jobs(), update_job().
+      * delete_job(): Chỉ Admin được xóa; ngăn chặn xóa vị trí đang có ứng viên ứng tuyển.
+    + Thống kê phễu tuyển dụng (get_funnel_statistics):
+      * Tính toán số lượng ứng viên theo 6 trạng thái.
+      * Tính tỷ lệ phần trăm chuyển đổi qua các vòng liên tiếp và số ứng viên bị Loại.
+      * Chuẩn bị sẵn cấu trúc dữ liệu cho FunnelCanvas vẽ biểu đồ.
+    + Xuất báo cáo CSV (export_candidates_to_csv):
+      * Sử dụng bảng mã UTF-8-SIG (utf-8-sig) tương thích 100% hiển thị tiếng Việt
+        có dấu trên Microsoft Excel mà không bị lỗi font chữ.
+      * Xuất đầy đủ 8 cột: ID, Họ tên, Email, Số điện thoại, Vị trí, Kinh nghiệm, Trạng thái, Điểm.
+
+• services/job_crawler.py:
+  - Lớp JobCrawler thu thập việc làm IT:
+    + Gửi HTTP Request qua thư viện requests tới API tuyển dụng.
+    + Bắt an toàn toàn bộ ngoại lệ mạng: ConnectionError, Timeout, HTTPError.
+    + Chuẩn hóa dữ liệu thô (normalize_job_data).
+    + Tích hợp bộ dữ liệu dự phòng IT Việt Nam (Fallback Jobs) chất lượng cao
+      để phục vụ trình chiếu, demo mượt mà ngay cả khi mất mạng hoàn toàn.
+    + Lưu kết quả vào data/crawled_jobs.json.
+
+• services/__init__.py:
+  - Module xuất khẩu tập trung cho tầng Services.
+
+
+4. TẦNG GIAO DIỆN NGƯỜI DÙNG (ui/) - TKINTER DESKTOP GUI
+--------------------------------------------------------------------------------
+Quy tắc Layout bắt buộc tuân thủ:
+- Các khung lớn cấp ngoài (Top containers, Notebook, Canvas, Card) dùng pack().
+- Bên trong mọi LabelFrame CHỈ DÙNG grid().
+- Tuyệt đối không trộn lẫn pack() và grid() trong cùng 1 parent container.
+
+• ui/custom_widgets.py:
+  - Lớp CandidateCard(tk.Frame):
+    + Hiển thị thẻ tóm tắt hồ sơ chi tiết của ứng viên được chọn.
+    + Tự động thay đổi màu sắc viền và huy hiệu theo 6 trạng thái tuyển dụng:
+      * Nộp hồ sơ: Xanh dương (#2980b9)
+      * Duyệt CV: Xanh ngọc (#16a085)
+      * Phỏng vấn vòng 1: Cam tươi (#f39c12)
+      * Phỏng vấn vòng 2: Cam đậm (#d35400)
+      * Đạt/Offer: Xanh lá cây trúng tuyển (#27ae60)
+      * Loại: Đỏ (#c0392b)
+    + Phương thức: update_candidate(candidate) và clear().
+
+• ui/funnel_canvas.py:
+  - Lớp FunnelCanvas(tk.Canvas):
+    + Biểu đồ phễu tuyển dụng vẽ tay hoàn toàn trên tk.Canvas.
+    + Tự động co giãn kích thước theo sự kiện <Configure> của cửa sổ.
+    + Minh họa dòng chảy tuyển dụng qua 5 tầng liên tiếp:
+      Nộp hồ sơ -> Duyệt CV -> Phỏng vấn vòng 1 -> Phỏng vấn vòng 2 -> Đạt/Offer.
+    + Hiển thị tên vòng, số lượng ứng viên và tỷ lệ phần trăm (%).
+    + Trạng thái "Loại" được tổng hợp độc lập ở chân biểu đồ dưới dạng chỉ số rơi rụng.
+    + Xử lý an toàn khi chưa có dữ liệu: hiển thị "Chưa có dữ liệu tuyển dụng", không crash.
+
+• ui/candidate_view.py:
+  - Lớp CandidateView(tk.Frame):
+    + Màn hình quản lý ứng viên gồm 3 tầng:
+      1. Tầng trên: Khung Nhập liệu (Trái) & Khung Tìm kiếm/Lọc (Phải).
+      2. Tầng giữa: Bảng Treeview danh sách ứng viên (tô màu tag theo trạng thái).
+      3. Tầng dưới: Biểu đồ FunnelCanvas (Trái) & Thẻ CandidateCard (Phải).
+    + Sự kiện chọn dòng trên bảng: tự động nạp dữ liệu lên Form và thẻ CandidateCard.
+    + Phân quyền UX: Nếu người đăng nhập là Staff -> nút [Xóa] tự động bị vô hiệu (disabled).
+    + Tích hợp nút [Xuất CSV báo cáo] qua hộp thoại filedialog.asksaveasfilename().
+
+• ui/login_window.py:
+  - Lớp LoginWindow(tk.Tk):
+    + Cửa sổ đăng nhập căn giữa màn hình.
+    + Ô nhập mật khẩu ẩn bằng dấu sao (show="*").
+    + Hỗ trợ phím Enter để đăng nhập nhanh.
+    + Gọi AuthService.login() đối soát SHA-256. Thành công thì đóng LoginWindow và mở MainWindow.
+
+• ui/main_window.py:
+  - Lớp MainWindow(tk.Tk):
+    + Cửa sổ chính với Menu bar (Hệ thống, Quản lý, Crawl, Thống kê).
+    + Status bar cố định ở đáy hiển thị tên người dùng và quyền hạn:
+      "Sẵn sàng | User: admin | Role: Admin | Version 1.0.0".
+    + Gồm 3 Tab quản lý (ttk.Notebook):
+      * Tab 1: Quản lý Ứng viên (nhúng CandidateView).
+      * Tab 2: Quản lý Vị trí Tuyển dụng (JobPosition CRUD đầy đủ).
+      * Tab 3: Crawl Tin Tuyển dụng IT.
+    + Tối ưu Worker Thread cho Crawler:
+      Chạy fetch_jobs() trên threading.Thread riêng (daemon=True), đẩy kết quả vào
+      queue.Queue(), main thread thăm dò định kỳ bằng self.after(100, poll).
+      Trong lúc tải: nút Crawl bị disabled và nhãn hiển thị "Đang tải dữ liệu...",
+      đảm bảo giao diện hoàn toàn không bị đơ/treo khi có sự cố mạng.
+    + Chức năng Đăng xuất: xác nhận askyesno, hủy MainWindow và mở lại LoginWindow.
+
+• ui/__init__.py:
+  - Module xuất khẩu tập trung cho tầng UI.
+
+
+5. ĐIỂM KHỞI CHẠY & DỮ LIỆU THỰC TẾ
+--------------------------------------------------------------------------------
+• main.py:
+  - Điểm vào (entry point) của phần mềm qua lớp ApplicationController.
+  - Tự động kiểm tra và khởi tạo thư mục data/ và backups/.
+  - Tự động nạp dữ liệu mẫu ban đầu nếu máy chạy lần đầu (seed data).
+  - Khởi động cửa sổ đăng nhập LoginWindow, sau khi đăng nhập thành công mới mở MainWindow.
+
+• data/users.json:
+  - Lưu trữ danh sách người dùng với mật khẩu băm SHA-256:
+    + admin (pass: admin123) - Role: Admin
+    + staff (pass: staff123) - Role: Staff
+
+• data/jobs.json:
+  - Danh mục 5 vị trí tuyển dụng mẫu:
+    + DEV_PY: Senior Python Backend Developer (25tr - 45tr)
+    + DEV_FE: Frontend React Specialist (20tr - 35tr)
+    + QA_QC: Automation QA Tester (18tr - 28tr)
+    + DEVOPS: DevOps Cloud Engineer (28tr - 48tr)
+    + DATA_AI: AI & Data Engineer (30tr - 55tr)
+
+• data/candidates.json:
+  - Lưu trữ 7 ứng viên mẫu trải đều qua các vòng tuyển dụng:
+    + C001: Nguyễn Văn An - Đạt/Offer (92.0 điểm)
+    + C002: Trần NGUYỄN Bảo - Phỏng vấn vòng 2 (85.0 điểm)
+    + C003: Lê Thị Cẩm - Phỏng vấn vòng 1 (78.0 điểm)
+    + C004: Phạm Quốc Dũng - Duyệt CV (65.0 điểm)
+    + C005: Hoàng Minh Em - Nộp hồ sơ (0.0 điểm)
+    + C006: Vũ Đình Phúc - Đạt/Offer (96.0 điểm)
+    + C007: Đỗ Thị Quỳnh - Loại (40.0 điểm)
+
+• data/crawled_jobs.json:
+  - Lưu kết quả các tin tuyển dụng IT đã thu thập.
+
+• backups/:
+  - Thư mục chuẩn chứa các file sao lưu tự động .bak của candidates.json.
+
+
+6. TẦNG KIỂM THỬ TỰ ĐỘNG (tests/) - 40/40 TESTS PASS (100%)
+--------------------------------------------------------------------------------
+Tất cả các test đều dùng thư mục tạm (tempfile), tuyệt đối không đụng vào dữ liệu thật:
+
+• tests/test_models.py (6 tests):
+  - Kiểm tra Person là lớp trừu tượng (không thể khởi tạo trực tiếp).
+  - Kiểm tra Regex email (chấp nhận email đúng, chặn nguyenvana@).
+  - Kiểm tra Regex SĐT di động VN (chấp nhận 10 số đầu 03/05/07/08/09, chặn 9 số/đầu số lạ).
+  - Kiểm tra ràng buộc điểm phỏng vấn [0, 100], kinh nghiệm >= 0.
+  - Kiểm tra User phân quyền Admin/Staff, băm mật khẩu.
+  - Kiểm tra JobPosition min_salary <= max_salary và quota > 0.
+
+• tests/test_file_manager.py (8 tests):
+  - File không tồn tại -> tự tạo default [].
+  - File 0-byte -> trả về [] an toàn, không crash.
+  - Đọc/ghi JSON Unicode tiếng Việt.
+  - JSON sai cú pháp + có backup -> tự phục hồi thành công từ bản .bak gần nhất.
+  - JSON sai cú pháp + không có backup -> ném JSONCorruptedError rõ ràng.
+  - Tự động tạo backup của dữ liệu cũ trước khi ghi dữ liệu mới.
+  - Ghi nguyên tử (atomic write) qua .tmp và os.replace.
+  - Tự động tạo thư mục lồng nhau nếu chưa có.
+
+• tests/test_services.py (14 tests):
+  - Đăng nhập Admin thành công.
+  - Đăng nhập Staff thành công.
+  - Sai mật khẩu từ chối đăng nhập.
+  - SHA-256 chuỗi băm 64 ký tự hex.
+  - Chặn thêm ứng viên trùng ID.
+  - CRUD Candidate đầy đủ.
+  - Staff gọi hàm xóa ứng viên -> ném PermissionError.
+  - Admin xóa ứng viên thành công.
+  - Tìm kiếm "nguyễn" khớp cả "Nguyễn Văn An" và "Trần NGUYỄN", tìm theo SĐT.
+  - Lọc kết hợp vị trí + trạng thái.
+  - CRUD JobPosition (ngăn xóa vị trí khi đang có ứng viên).
+  - Tính toán số liệu Funnel statistics.
+  - Xuất CSV tiếng Việt chuẩn UTF-8-SIG.
+  - Crawler xử lý ConnectionError không crash, nạp fallback an toàn.
+
+• tests/test_ui.py (11 tests):
+  - Khởi tạo LoginWindow.
+  - Khởi tạo MainWindow.
+  - CandidateView nạp dữ liệu lên Treeview.
+  - Nút Xóa bị disabled khi đăng nhập bằng Staff.
+  - Nút Xóa được bật khi đăng nhập bằng Admin.
+  - Thẻ CandidateCard cập nhật và làm mới.
+  - FunnelCanvas xử lý dữ liệu rỗng không crash.
+  - FunnelCanvas nhận số liệu từ Service.
+  - Đăng xuất quay về LoginWindow.
+  - Ứng dụng khởi động không crash.
+  - Crawler chạy trên worker thread không làm block UI (< 100ms).
+
+• tests/test_flow_verification.py (1 test):
+  - Kiểm thử tích hợp toàn trình (End-to-End Flow) xác minh 100% tiêu chí đề bài.
+
+
+7. FILE THỰC THI & TÀI LIỆU CẤU HÌNH
+--------------------------------------------------------------------------------
+• dist/QuanLyTuyenDung.exe:
+  - File thực thi độc lập đóng gói bằng PyInstaller (lệnh: pyinstaller --onefile --windowed --name QuanLyTuyenDung main.py).
+  - Không cần cài Python trên máy đích vẫn chạy được bình thường.
+  - Tự động nhận diện đường dẫn qua sys.frozen, sinh thư mục data/ và backups/ ngay kế bên file exe.
+  - Không bật cửa sổ console màu đen phía sau (nhờ cờ --windowed).
+  - Đã được kiểm tra bảo toàn dữ liệu (Persistence) qua nhiều lần bật/tắt ứng dụng.
+
+• README.md:
+  - Bản tài liệu Markdown đầy đủ hướng dẫn kiến trúc, cài đặt, chạy thử và bảng đối soát 10 tiêu chí đề tài.
+
+• .gitignore:
+  - Cấu hình chuẩn cho Git, loại trừ các thư mục tạm: __pycache__, build/, test_*_env/, file .bak trong backups/.
+
+
+IV. BẢNG ĐỐI CHIẾU 10 TEST CASE BẮT BUỘC (DONE-WHEN CRITERIA)
+--------------------------------------------------------------------------------
+STT | Tiêu chí đề bài                      | Thao tác thực nghiệm trên UI                       | Kết quả   | Đánh giá
+----+--------------------------------------+---------------------------------------------------+-----------+---------
+ 1  | Thêm trùng ID -> báo lỗi             | Nhập ID C001 đã có -> bấm [Thêm]                  | Báo lỗi   |  PASS
+ 2  | Email sai (nguyenvana@) -> báo lỗi   | Nhập email thiếu domain -> bấm [Thêm]             | Báo lỗi   |  PASS
+ 3  | SĐT sai (9 số/đầu lạ) -> báo lỗi     | Nhập 9 số hoặc đầu 01 -> bấm [Thêm]               | Báo lỗi   |  PASS
+ 4  | Điểm ngoài [0, 100] -> báo lỗi       | Nhập điểm -5 hoặc 105 -> bấm [Thêm]               | Báo lỗi   |  PASS
+ 5  | candidates.json 0-byte -> nạp []     | Xóa sạch file về 0 byte -> mở app                 | Nạp []    |  PASS
+ 6  | candidates.json hỏng -> phục hồi .bak| Gõ cú pháp JSON lỗi -> mở app                     | Phục hồi  |  PASS
+ 7  | Staff bấm xóa -> chặn quyền          | Đăng nhập staff -> nút Xóa bị vô hiệu (disabled)  | Chặn xóa  |  PASS
+ 8  | Tìm "nguyễn" -> khớp cả hoa/thường   | Tìm "nguyễn" -> ra cả "Nguyễn Văn An" & "Trần NGUYỄN"| Khớp cả 2 |  PASS
+ 9  | Mất mạng khi crawl -> không crash    | Tắt mạng -> bấm [Bắt đầu Crawl]                   | Báo lỗi mạng| PASS
+    |                                      |                                                   | & nạp mẫu |
+ 10 | Chạy .exe trên máy không có Python   | Chạy QuanLyTuyenDung.exe từ thư mục độc lập       | Chạy mượt |  PASS
+----+--------------------------------------+---------------------------------------------------+-----------+---------
+Tổng kết: 10/10 tiêu chí nghiệm thu đều ĐẠT CHUẨN (PASS 100%).
+
+
+V. HƯỚNG DẪN SỬ DỤNG NHANH
+--------------------------------------------------------------------------------
+1. Chạy từ mã nguồn:
+   python main.py
+
+2. Chạy từ file đóng gói:
+   Nhấp đúp chuột vào dist/QuanLyTuyenDung.exe
+
+3. Tài khoản đăng nhập:
+   - Admin: admin / admin123 (Toàn quyền)
+   - Staff: staff / staff123 (Xem & sửa điểm/vòng, không được xóa)
+
+4. Chạy toàn bộ 40 test tự động:
+   python -m unittest discover -s tests
+
+================================================================================
+                    HẾT BÁO CÁO THUYẾT MINH CHI TIẾT
+================================================================================
